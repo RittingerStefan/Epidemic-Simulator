@@ -6,6 +6,7 @@
 
 // DEFINE AREA ----------------------------------------------------------------
 
+// #define DEBUG // comment to prevent prints on all steps
 #define CARDINAL_N 0
 #define CARDINAL_S 1
 #define CARDINAL_E 2
@@ -32,7 +33,7 @@ typedef struct person_t {
     int id;
     int x, y;
     int movement_pattern, amplitude;
-    int status;
+    int status, got_infected;
     int timer_infected, timer_immune;
     int count_infected;
 } person_t;
@@ -177,6 +178,113 @@ void cleanup() {
     free(people);
 }
 
+// HELPER FUNCTIONS -----------------------------------------------------------
+
+void update_position(person_t* person) {
+    int new_x = person->x;
+    int new_y = person->y;
+    int amplitude = person->amplitude;
+
+    if(person->movement_pattern == DIR_VERTICAL) new_y += amplitude;
+    else new_x += amplitude;
+
+    if(new_y < 0) {
+        new_y = 0 ;
+        amplitude *= -1;
+    }
+
+    if(new_y >= max_coord_y) {
+        new_y = max_coord_y - 1;
+        amplitude *= -1;
+    }
+
+    if(new_x < 0) {
+        new_x = 0;
+        amplitude *= -1;
+    }
+
+    if(new_x > max_coord_x) {
+        new_x = max_coord_x - 1;
+        amplitude *= -1;
+    }
+
+    person->x = new_x;
+    person->y = new_y;
+    person->amplitude = amplitude;
+}
+
+void infect_neighbors(person_t* infected_person) {
+    for(int i = 0; i < people_number; i++) 
+        // find uninfected people with the same coordinates, but make sure id is different
+        if(people[i]->x == infected_person->x && people[i]->y == infected_person->y 
+           && people[i]->id != infected_person->id && people[i]->status == STAT_SUSCEPTIBLE)
+                people[i]->got_infected = 1;
+}
+
+void set_next_status(person_t* person) {
+    if(person->status == STAT_SUSCEPTIBLE && person->got_infected) {
+        person->status = STAT_INFECTED;
+        person->timer_infected = TIME_INFECTED;
+        person->count_infected++;
+        person->got_infected = 0; 
+    } else if(person->status == STAT_INFECTED) {
+        person->timer_infected--;
+        if(person->timer_infected == 0) {
+            person->status = STAT_IMMUNE;
+            person->timer_immune = TIME_IMMUNE;
+        }
+    } else if(person->status == STAT_IMMUNE) {
+        person->timer_immune--;
+        if(person->timer_immune == 0)
+            person->status = STAT_SUSCEPTIBLE;
+    }    
+}
+
+void print_person_data(person_t* person) {
+    char status[15] = "";
+
+    switch(person->status) {
+        case STAT_SUSCEPTIBLE:
+            strcpy(status, "SUSCEPTIBLE");
+            break;
+        case STAT_INFECTED:
+            strcpy(status, "INFECTED");
+            break;
+        case STAT_IMMUNE:
+            strcpy(status, "IMMUNE");
+            break;
+    }
+
+    printf("Person %d: (%d, %d), status: %s, was infected %d time(s).\n", person->id, person->x, person->y, status, person->count_infected);
+}
+
+// SIMULATION -----------------------------------------------------------------
+
+void epidemic_simulation_serial() {
+    for(int i = 0; i < simulation_time; i++) {
+        
+        for(int i = 0; i < people_number; i++) 
+            update_position(people[i]);
+
+        // check only people that are infected, as only they can propagate
+        // their status.
+        for(int i = 0; i < people_number; i++)
+            if(people[i]->status == STAT_INFECTED)
+                infect_neighbors(people[i]);
+
+        for(int i = 0; i < people_number; i++) 
+            set_next_status(people[i]);
+
+#ifdef DEBUG
+        for(int i = 0; i < people_number; i++)
+            print_person_data(people[i]);
+        printf("\n");
+#endif
+    }
+}
+
+// main -----------------------------------------------------------------------
+
 int main(int argc, char* argv[]) {
     if(argc < 3) {
         printf("Please provide the following arguments: simulation time, input file name, thread number.\n");
@@ -185,6 +293,12 @@ int main(int argc, char* argv[]) {
 
     handle_arguments(argv);
     read_input_from_file();
+
+    epidemic_simulation_serial();
+
+    printf("Final people status: (WRITE THESE IN A FILE LATER!!!)\n");
+    for(int i = 0; i < people_number; i++)
+        print_person_data(people[i]);
     
     cleanup();
     return 0;
