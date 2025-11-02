@@ -47,8 +47,9 @@ FILE* input_file;
 char* file_name;
 int max_coord_x, max_coord_y;
 int people_number;
-// array that will contain the address of the people
-person_t** people;
+// arrays that will contain the address of the people
+person_t **people_serial, **people_parallel;
+pthread_barrier_t barrier;
 
 // PERSON STRUCTURE FUNCTIONS -------------------------------------------------
 
@@ -142,6 +143,7 @@ person_t* get_person_data_from_string(char* string, int line) {
 // presume file is already opened inside the input file
 void read_input_from_file() {
     char* buffer = malloc(BUFFER_SIZE * sizeof(char));
+    char* buffer_copy = malloc(BUFFER_SIZE * sizeof(char));
     char* strtok_pointer;
 
     // read max dimensions of rectangle
@@ -163,22 +165,28 @@ void read_input_from_file() {
     }
 
     // read person data
-    people = malloc(people_number * sizeof(person_t));
+    people_serial = malloc(people_number * sizeof(person_t));
+    people_parallel = malloc(people_number * sizeof(person_t));
     for(int i = 0; i < people_number; i++) {
         fgets(buffer, BUFFER_SIZE, input_file);
-        people[i] = get_person_data_from_string(buffer, i);
+        strcpy(buffer_copy, buffer);
+        people_serial[i] = get_person_data_from_string(buffer, i);
+        people_parallel[i] = get_person_data_from_string(buffer_copy, i);
     }
 
     free(buffer);
+    free(buffer_copy);
 }
 
 void cleanup() {
     fclose(input_file);
     free(file_name);
     for(int i = 0; i < people_number; i++) {
-        free(people[i]);
+        free(people_serial[i]);
+        free(people_parallel[i]);
     }
-    free(people);
+    free(people_serial);
+    free(people_parallel);
 }
 
 // HELPER FUNCTIONS -----------------------------------------------------------
@@ -216,8 +224,8 @@ void update_position(person_t* person) {
     person->amplitude = amplitude;
 }
 
-void infect_neighbors(person_t* infected_person) {
-    for(int i = 0; i < people_number; i++) 
+void infect_neighbors(person_t* infected_person, person_t** people) {
+    for(int i = 0; i < people_number; i++)
         // find uninfected people with the same coordinates, but make sure id is different
         if(people[i]->x == infected_person->x && people[i]->y == infected_person->y 
            && people[i]->id != infected_person->id && people[i]->status == STAT_SUSCEPTIBLE)
@@ -261,7 +269,7 @@ void print_person_data(person_t* person) {
     printf("Person %d: (%d, %d), status: %s, was infected %d time(s).\n", person->id, person->x, person->y, status, person->count_infected);
 }
 
-void write_result_in_file(char* append) {
+void write_result_in_file(char* append, person_t** people) {
     char* file_name_no_extension = strtok(file_name, ".");
     char* new_file_name = malloc(sizeof(char) * (strlen(file_name_no_extension) + strlen(append)));
     char status[15] = "";
@@ -290,34 +298,91 @@ void write_result_in_file(char* append) {
         }
         fprintf(write_file, "Person %d: (%d, %d), status: %s, was infected %d time(s).\n", people[i]->id, people[i]->x, people[i]->y, status, people[i]->count_infected);
     }
-
+    printf("Results printed in file: %s\n", new_file_name);
     free(new_file_name);
     fclose(write_file);
+}
+
+// HELPER FUNCTIONS PARALLEL --------------------------------------------------
+
+void* pthread_person_simulate(void* thread_rank) {
+    int rank = *(int*)thread_rank;
+    int start = (people_number / thread_number) * rank;
+    int end;
+
+    if(rank == thread_number - 1) 
+        end = people_number - 1;
+    else 
+        end = (people_number / thread_number) * (rank + 1);
+    
+    for(int time = 0; time < simulation_time; time++) {
+        for(int i = start; i < end; i++) 
+            update_position(people_parallel[i]);
+
+        pthread_barrier_wait(&barrier);
+
+        for(int i = start; i < end; i++) 
+            if(people_parallel[i]->status == STAT_INFECTED)
+                infect_neighbors(people_parallel[i], people_parallel);
+        
+        pthread_barrier_wait(&barrier);
+        
+        for(int i = start; i < end; i++) 
+            set_next_status(people_parallel[i]);
+
+#ifdef DEBUG
+        for(int i = start; i < end; i++)
+            print_person_data(people_parallel[i]);
+        printf("\n");
+#endif
+        pthread_barrier_wait(&barrier);
+    }
+
+    return NULL;
 }
 
 // SIMULATION -----------------------------------------------------------------
 
 void epidemic_simulation_serial() {
-    for(int i = 0; i < simulation_time; i++) {
+    for(int time = 0; time < simulation_time; time++) {
         
         for(int i = 0; i < people_number; i++) 
-            update_position(people[i]);
+            update_position(people_serial[i]);
 
         // check only people that are infected, as only they can propagate
         // their status.
         for(int i = 0; i < people_number; i++)
-            if(people[i]->status == STAT_INFECTED)
-                infect_neighbors(people[i]);
+            if(people_serial[i]->status == STAT_INFECTED)
+                infect_neighbors(people_serial[i], people_serial);
 
         for(int i = 0; i < people_number; i++) 
-            set_next_status(people[i]);
+            set_next_status(people_serial[i]);
 
 #ifdef DEBUG
         for(int i = 0; i < people_number; i++)
-            print_person_data(people[i]);
+            print_person_data(people_serial[i]);
         printf("\n");
 #endif
     }
+}
+
+void epidemic_simulation_parallel() {
+    pthread_t* threads = malloc(sizeof(pthread_t) * thread_number);
+    int* tid = malloc(sizeof(int) * thread_number);
+    pthread_barrier_init(&barrier, NULL, thread_number);
+
+    for(int thread = 0; thread < thread_number; thread++) {
+        tid[thread] = thread;
+        pthread_create(&threads[thread], NULL, pthread_person_simulate, &tid[thread]);
+    }
+
+    for(int thread = 0; thread < thread_number; thread++) {
+        pthread_join(threads[thread], NULL);
+    }
+
+    pthread_barrier_destroy(&barrier);
+    free(threads);
+    free(tid);
 }
 
 // main -----------------------------------------------------------------------
@@ -332,7 +397,10 @@ int main(int argc, char* argv[]) {
     read_input_from_file();
 
     epidemic_simulation_serial();
-    write_result_in_file("_serial_out.txt");
+    write_result_in_file("_serial_out.txt", people_serial);
+
+    epidemic_simulation_parallel();
+    write_result_in_file("_parallel_out.txt", people_parallel);
     
     cleanup();
     return 0;
