@@ -44,6 +44,7 @@ typedef struct person_t {
 int simulation_time;
 int thread_number;
 FILE* input_file;
+char* file_name;
 int max_coord_x, max_coord_y;
 int people_number;
 // array that will contain the address of the people
@@ -105,6 +106,8 @@ void handle_arguments(char* argv[]) {
     }
 
     input_file = fopen(argv[2], "r");
+    file_name = malloc(sizeof(char) * strlen(argv[2]));
+    strncpy(file_name, argv[2], strlen(argv[2]));
     if(input_file == NULL) {
         printf("Error opening the file.\n");
         exit(-2);
@@ -149,7 +152,6 @@ void read_input_from_file() {
         printf("Error reading the max coordinates.\n");
         exit(-3);
     }
-    printf("%d %d\n", max_coord_x, max_coord_y);
 
 
     // read number of people
@@ -172,6 +174,7 @@ void read_input_from_file() {
 
 void cleanup() {
     fclose(input_file);
+    free(file_name);
     for(int i = 0; i < people_number; i++) {
         free(people[i]);
     }
@@ -258,6 +261,40 @@ void print_person_data(person_t* person) {
     printf("Person %d: (%d, %d), status: %s, was infected %d time(s).\n", person->id, person->x, person->y, status, person->count_infected);
 }
 
+void write_result_in_file(char* append) {
+    char* file_name_no_extension = strtok(file_name, ".");
+    char* new_file_name = malloc(sizeof(char) * (strlen(file_name_no_extension) + strlen(append)));
+    char status[15] = "";
+    FILE* write_file;
+
+    strcpy(new_file_name, file_name_no_extension);
+    strcat(new_file_name, append);
+    write_file = fopen(new_file_name, "w");
+
+    if(write_file == NULL) {
+        printf("Error creating output file.\n");
+        return;
+    }
+
+    for(int i = 0; i < people_number; i++) {
+        switch(people[i]->status) {
+            case STAT_SUSCEPTIBLE:
+                strcpy(status, "SUSCEPTIBLE");
+                break;
+            case STAT_INFECTED:
+                strcpy(status, "INFECTED");
+                break;
+            case STAT_IMMUNE:
+                strcpy(status, "IMMUNE");
+                break;
+        }
+        fprintf(write_file, "Person %d: (%d, %d), status: %s, was infected %d time(s).\n", people[i]->id, people[i]->x, people[i]->y, status, people[i]->count_infected);
+    }
+
+    free(new_file_name);
+    fclose(write_file);
+}
+
 // SIMULATION -----------------------------------------------------------------
 
 void epidemic_simulation_serial() {
@@ -295,10 +332,7 @@ int main(int argc, char* argv[]) {
     read_input_from_file();
 
     epidemic_simulation_serial();
-
-    printf("Final people status: (WRITE THESE IN A FILE LATER!!!)\n");
-    for(int i = 0; i < people_number; i++)
-        print_person_data(people[i]);
+    write_result_in_file("_serial_out.txt");
     
     cleanup();
     return 0;
