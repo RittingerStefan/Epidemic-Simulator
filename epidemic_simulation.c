@@ -7,6 +7,10 @@
 // DEFINE AREA ----------------------------------------------------------------
 
 // #define DEBUG // comment to prevent prints on all steps
+
+// to convert from nano seconds to seconds
+#define NANO 1000000000.0
+
 #define CARDINAL_N 0
 #define CARDINAL_S 1
 #define CARDINAL_E 2
@@ -303,6 +307,24 @@ void write_result_in_file(char* append, person_t** people) {
     fclose(write_file);
 }
 
+int check_equal(person_t* p1, person_t* p2) {
+    if(p1->id != p2->id) return 0;
+    if(p1->x != p2->x) return 0;
+    if(p1->y != p2->y) return 0;
+    if(p1->status != p2->status) return 0;
+    if(p1->count_infected != p2->count_infected) return 0;
+
+    return 1;
+}
+
+int check_if_same_result() {
+    for(int i = 0; i < people_number; i++)
+        if(!check_equal(people_parallel[i], people_serial[i])) {
+            return i;
+        }
+    return -1;
+}
+
 // HELPER FUNCTIONS PARALLEL --------------------------------------------------
 
 void* pthread_person_simulate(void* thread_rank) {
@@ -385,7 +407,7 @@ void epidemic_simulation_parallel() {
     free(tid);
 }
 
-// main -----------------------------------------------------------------------
+// MAIN -----------------------------------------------------------------------
 
 int main(int argc, char* argv[]) {
     if(argc < 3) {
@@ -393,14 +415,34 @@ int main(int argc, char* argv[]) {
         return -1;
     }
 
+    struct timespec start;
+    struct timespec end;
+    double time_serial, time_parallel;
+
     handle_arguments(argv);
     read_input_from_file();
 
+    clock_gettime(CLOCK_MONOTONIC, &start);
     epidemic_simulation_serial();
+    clock_gettime(CLOCK_MONOTONIC, &end);
+    time_serial = end.tv_sec - start.tv_sec;
+    time_serial += (end.tv_nsec - start.tv_nsec) / NANO;
+    printf("Time for serial: %lf\n", time_serial);
     write_result_in_file("_serial_out.txt", people_serial);
 
+    clock_gettime(CLOCK_MONOTONIC, &start);
     epidemic_simulation_parallel();
+    clock_gettime(CLOCK_MONOTONIC, &end);
+    time_parallel = end.tv_sec - start.tv_sec;
+    time_parallel += (end.tv_nsec - start.tv_nsec) / NANO;
+    printf("Time for parallel: %lf\n", time_parallel);
     write_result_in_file("_parallel_out.txt", people_parallel);
+
+    printf("Speedup: %lf\n", time_serial / time_parallel);
+
+    int id_of_mismatch = check_if_same_result();
+    if(id_of_mismatch == -1) printf("Results match.\n");
+    else printf("!!! RESULTS DO NOT MATCH AT %d !!!\n", id_of_mismatch);
     
     cleanup();
     return 0;
