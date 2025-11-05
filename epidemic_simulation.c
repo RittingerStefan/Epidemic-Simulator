@@ -320,7 +320,7 @@ int check_equal(person_t* p1, person_t* p2) {
 int check_if_same_result() {
     for(int i = 0; i < people_number; i++)
         if(!check_equal(people_parallel[i], people_serial[i])) {
-            return i;
+            return i + 1;
         }
     return -1;
 }
@@ -333,7 +333,7 @@ void* pthread_person_simulate(void* thread_rank) {
     int end;
 
     if(rank == thread_number - 1) 
-        end = people_number - 1;
+        end = people_number;
     else 
         end = (people_number / thread_number) * (rank + 1);
     
@@ -352,11 +352,6 @@ void* pthread_person_simulate(void* thread_rank) {
         for(int i = start; i < end; i++) 
             set_next_status(people_parallel[i]);
 
-#ifdef DEBUG
-        for(int i = start; i < end; i++)
-            print_person_data(people_parallel[i]);
-        printf("\n");
-#endif
         pthread_barrier_wait(&barrier);
     }
 

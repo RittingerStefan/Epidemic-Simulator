@@ -1,7 +1,7 @@
 Person 1: (2, 1), status: SUSCEPTIBLE, was infected 0 time(s).
-Person 2: (2, 2), status: SUSCEPTIBLE, was infected 0 time(s).
+Person 2: (2, 1), status: SUSCEPTIBLE, was infected 0 time(s).
 Person 3: (2, 1), status: SUSCEPTIBLE, was infected 0 time(s).
-Person 4: (0, 0), status: SUSCEPTIBLE, was infected 0 time(s).
+Person 4: (0, 3), status: SUSCEPTIBLE, was infected 0 time(s).
 Person 5: (0, 2), status: SUSCEPTIBLE, was infected 1 time(s).
 Person 6: (2, 2), status: SUSCEPTIBLE, was infected 1 time(s).
 Person 7: (2, 2), status: SUSCEPTIBLE, was infected 1 time(s).
