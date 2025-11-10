@@ -118,7 +118,7 @@ void handle_arguments(char* argv[]) {
         exit(-2);
     }
 
-    thread_number = atoi(argv[1]);
+    thread_number = atoi(argv[3]);
     if(thread_number <= 0) {
         printf("Incorrect thread number value.\n");
         exit(-2);
@@ -387,7 +387,7 @@ void epidemic_simulation_parallel() {
     pthread_t* threads = malloc(sizeof(pthread_t) * thread_number);
     int* tid = malloc(sizeof(int) * thread_number);
     pthread_barrier_init(&barrier, NULL, thread_number);
-
+    
     for(int thread = 0; thread < thread_number; thread++) {
         tid[thread] = thread;
         pthread_create(&threads[thread], NULL, pthread_person_simulate, &tid[thread]);
